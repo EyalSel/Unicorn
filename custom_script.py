@@ -21,6 +21,7 @@ class MEVASensor:
     def __init__(self, data_path, eager):
         self.data_path = data_path
         cap = cv2.VideoCapture(str(data_path))
+        self.total_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         ret = True
@@ -38,10 +39,7 @@ class MEVASensor:
             self.next_frame = 0
 
     def total_num_frames(self):
-        if self.eager:
-            return len(self.all_data)
-        else:
-            return int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        return self.total_length
 
     def __len__(self):
         return self.total_num_frames()
@@ -52,12 +50,14 @@ class MEVASensor:
         else:
             assert self.next_frame == frame_index, (self.next_frame,
                                                     frame_index)
-            self.next_frame += 1
+            if frame_index == self.total_num_frames():
+                raise IndexError()
             ret, frame = self.cap.read()
             assert ret, frame_index
             if frame_index == self.total_num_frames() - 1:
                 self.cap.release()
                 self.released = True
+            self.next_frame += 1
             return {"center_camera_feed": frame[:, :, ::-1]}
 
     def __del__(self):
@@ -68,9 +68,13 @@ class MEVASensor:
         return self
 
     def __next__(self):
+        try:
+            result = self.get_frame(self.next_frame)["center_camera_feed"]
+        except IndexError:
+            raise StopIteration()
         return {
-            "frame": self.next_frame + 1,
-            "img": self.get_frame(self.next_frame)["center_camera_feed"],
+            "frame": self.next_frame,
+            "img": result,
             "height": self.height,
             "width": self.width,
             "data_path": self.data_path

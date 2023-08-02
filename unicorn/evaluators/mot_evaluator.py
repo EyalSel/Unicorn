@@ -1002,7 +1002,6 @@ class MOTEvaluator:
             output_results = self.convert_to_coco_format(outputs, info_imgs, ids)
             data_list.extend(output_results)
 
-            assert outputs[0] is not None
             # run tracking
             if outputs[0] is not None:
                 with torch.no_grad():
