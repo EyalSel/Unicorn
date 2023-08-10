@@ -5,12 +5,21 @@ import torch
 import torch.backends.cudnn as cudnn
 
 import os
+from absl import app, flags
 from itertools import chain, repeat
 from pathlib import Path
 from unicorn.data import ValTransform
 from unicorn.data.datasets.datasets_wrapper import Dataset
 from unicorn.evaluators import MOTEvaluator
 from unicorn.exp import ExpTrack
+
+flags.DEFINE_multi_string(
+    'avi_files',
+    default=None,
+    required=False,
+    help="List of avi files to generate ground truth for")
+
+FLAGS = flags.FLAGS
 
 
 class MEVASensor:
@@ -137,7 +146,12 @@ class MOTMEVADataset(Dataset):
         """
         super().__init__(img_size)
         self.next_index = 0
-        files = list(Path("../ad-config-search/MEVA").glob("*.avi"))
+        if FLAGS.avi_files is None:
+            files = list(Path("../ad-config-search/MEVA").glob("*.avi"))
+        else:
+            files = [
+                Path("../ad-config-search/MEVA") / fn for fn in FLAGS.avi_files
+            ]
         readers = [MEVASensor(str(f), eager=False) for f in files]
         self.total_length = sum(
             [reader.total_num_frames() for reader in readers])
@@ -187,10 +201,8 @@ class MOTMEVADataset(Dataset):
         fake_image_path = Path(img_dict["data_path"]).name.replace(".avi", "")
         fake_image_path = fake_image_path + "/img{}.jpg".format(
             str(img_dict["frame"]).zfill(5))
-        img_info = (
-            img_dict["height"], img_dict["width"], img_dict["frame"], video_id,
-            fake_image_path
-        )
+        img_info = (img_dict["height"], img_dict["width"], img_dict["frame"],
+                    video_id, fake_image_path)
         # imgs, _, info_imgs, ids
         # imgs, None, (height, width, frame_id, video_id, file_name), index
         # where file_name = "video_name/img_{index}.jpg" fake path template
@@ -214,7 +226,7 @@ class Args:
 # exp.grid_sample ++
 
 
-def main():
+def main(_):
     exp = Exp()
     experiment_name = "MEVA-dir"
     is_distributed = False
@@ -264,5 +276,5 @@ def main():
                                           grid_sample=exp.grid_sample)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    app.run(main)
