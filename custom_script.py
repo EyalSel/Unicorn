@@ -19,6 +19,13 @@ flags.DEFINE_multi_string(
     required=False,
     help="List of avi files to generate ground truth for")
 
+flags.DEFINE_string(
+    'external_detections_base_path',
+    default=None,
+    required=False,
+    help=("A path to detections made by another model to be used instead of "
+          "Unicorn's own detector."))
+
 FLAGS = flags.FLAGS
 
 
@@ -159,6 +166,17 @@ class MOTMEVADataset(Dataset):
             zip(repeat(video_id), reader)
             for video_id, reader in enumerate(readers)
         ])
+        self.external_detections = None
+        if FLAGS.external_detections_base_path is not None:
+            # There is no standardized naming system at the moment, so this is
+            # an ad-hoc conversion from the AVI file name to the DETA detection
+            # predictions.
+            video_names = [f.name.replace(".avi", "") for f in files]
+            self.external_detections = [
+                np.load(
+                    Path(FLAGS.external_detections_base_path) /
+                    f"preds--{name}__DETA.pl.npy") for name in video_names
+            ]
 
         # for single class inference, used by coco for detection output
         # organization
@@ -201,8 +219,12 @@ class MOTMEVADataset(Dataset):
         fake_image_path = Path(img_dict["data_path"]).name.replace(".avi", "")
         fake_image_path = fake_image_path + "/img{}.jpg".format(
             str(img_dict["frame"]).zfill(5))
+        external_detections = (
+            0 if self.external_detections is None else
+            self.external_detections[video_id][img_dict["frame"]])
         img_info = (img_dict["height"], img_dict["width"], img_dict["frame"],
-                    video_id, fake_image_path)
+                    video_id, fake_image_path, self.external_detections
+                    is not None, external_detections)
         # imgs, _, info_imgs, ids
         # imgs, None, (height, width, frame_id, video_id, file_name), index
         # where file_name = "video_name/img_{index}.jpg" fake path template

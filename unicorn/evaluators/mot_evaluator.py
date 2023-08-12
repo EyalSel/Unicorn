@@ -1028,7 +1028,6 @@ class MOTEvaluator:
         track_time = 0
         n_samples = len(self.dataloader) - 1
 
-        tracker = QuasiDenseEmbedTracker()
         s = 8
         for cur_iter, (imgs, _, info_imgs,
                        ids) in enumerate(progress_bar(self.dataloader)):
@@ -1037,12 +1036,18 @@ class MOTEvaluator:
                 frame_id = info_imgs[2].item()
                 video_id = info_imgs[3].item()
                 img_file_name = info_imgs[4]
+                use_external_detections = info_imgs[5].item()
+                external_detections = info_imgs[6]
                 video_name = img_file_name[0].split('/')[0]
 
                 if video_name not in video_names:
                     video_names[video_id] = video_name
                 if frame_id == 1:
-                    tracker = QuasiDenseEmbedTracker()
+                    if use_external_detections:
+                        tracker = QuasiDenseEmbedTracker(init_score_thr=0.4,
+                                                         obj_score_thr=0.4)
+                    else:
+                        tracker = QuasiDenseEmbedTracker()
                     if len(results) != 0:
                         result_filename = os.path.join(
                             result_folder,
@@ -1072,12 +1077,38 @@ class MOTEvaluator:
                 outputs, info_imgs, ids)
             data_list.extend(output_results)
 
+            if use_external_detections:
+                # Get rid of batchsize = 1 first dimension
+                assert external_detections.shape[
+                    0] == 1, external_detections.shape
+                external_detections = external_detections[0]
+                # prune out by confidence > 0.4 and by label = 1
+                external_detections = external_detections[
+                    (external_detections[:, 5] > 0.4)
+                    & (external_detections[:, 6] == 1)]
+                bboxes = external_detections[:, 1:5]
+                scores = external_detections[:, 5:6]
+                labels = external_detections[:, 6:7]
+                # adjust order to xmn, ymn, xmx, ymx
+                bboxes = bboxes[:, [1, 0, 3, 2]]
+                # adjust scale of bounding boxes to fit unicorn
+                img_h, img_w = info_imgs[0].item(), info_imgs[1].item()
+                scale = min(self.img_size[0] / float(img_h),
+                            self.img_size[1] / float(img_w))
+                bboxes *= scale
+                # Place on GPU
+                bboxes = bboxes.cuda().float()
+                scores = scores.cuda().float()
+                labels = labels.cuda()
+
             # run tracking
-            if outputs[0] is not None:
+            if (use_external_detections and len(bboxes) > 0) or (outputs[0]
+                                                                 is not None):
                 with torch.no_grad():
                     # prepare for tracking
-                    bboxes, scores = outputs[
-                        0][:, :4], outputs[0][:, 4:5] * outputs[0][:, 5:6]
+                    if not use_external_detections:
+                        bboxes, scores = outputs[
+                            0][:, :4], outputs[0][:, 4:5] * outputs[0][:, 5:6]
                     # filter low-score boxes
                     keep_inds = scores[:, 0] > 0.1
                     bboxes = bboxes[keep_inds]
