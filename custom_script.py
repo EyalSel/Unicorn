@@ -221,7 +221,7 @@ class MOTMEVADataset(Dataset):
             str(img_dict["frame"]).zfill(5))
         external_detections = (
             0 if self.external_detections is None else
-            self.external_detections[video_id][img_dict["frame"]])
+            self.external_detections[video_id][img_dict["frame"] - 1])
         img_info = (img_dict["height"], img_dict["width"], img_dict["frame"],
                     video_id, fake_image_path, self.external_detections
                     is not None, external_detections)
