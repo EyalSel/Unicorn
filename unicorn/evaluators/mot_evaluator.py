@@ -1043,6 +1043,7 @@ class MOTEvaluator:
                 if video_name not in video_names:
                     video_names[video_id] = video_name
                 if frame_id == 1:
+                    pre_dict = None
                     if use_external_detections:
                         tracker = QuasiDenseEmbedTracker(init_score_thr=0.4,
                                                          obj_score_thr=0.4)
@@ -1114,7 +1115,7 @@ class MOTEvaluator:
                     bboxes = bboxes[keep_inds]
                     scores = scores[keep_inds]
                     labels = torch.ones((bboxes.size(0), ))  # (N, )
-                    if frame_id == 1:
+                    if pre_dict is None:
                         pre_dict = copy.deepcopy(cur_dict)
                     """ feature interaction """
                     _, new_feat_cur = model(seq_dict0=pre_dict,
